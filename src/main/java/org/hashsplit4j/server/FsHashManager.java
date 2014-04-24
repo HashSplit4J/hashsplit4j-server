@@ -7,6 +7,7 @@ import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.ITopic;
 import com.hazelcast.core.Member;
+import com.hazelcast.core.MemberAttributeEvent;
 import com.hazelcast.core.MembershipEvent;
 import com.hazelcast.core.MembershipListener;
 import com.hazelcast.core.Message;
@@ -138,6 +139,13 @@ public class FsHashManager {
         @Override
         public void memberRemoved(MembershipEvent me) {
         }
+
+        @Override
+        public void memberAttributeChanged(MemberAttributeEvent mae) {
+
+        }
+        
+        
     }
 
     public class SyncQueueConsumer implements Runnable {
