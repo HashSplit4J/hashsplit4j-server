@@ -95,7 +95,15 @@ public class BlobbyResourceFactory implements ResourceFactory {
                 
         fsBlobStore = new FileSystemBlobStore(root, eventManager);
         blobStore = new CachingBlobStore(fsBlobStore, 1000);
-        hashManager = new FsHashManager(fsBlobStore, localHashManager, eventManager, root, user, password, httpPort);
+        String sDisableSync = props.getProperty("disable-sync");
+        boolean disableSync = "true".equalsIgnoreCase(sDisableSync);
+        if( !disableSync ) {
+            log.info("Cluster syncing is enabled. To disable set disable-sync=true in blobby.properties");
+            hashManager = new FsHashManager(fsBlobStore, localHashManager, eventManager, root, user, password, httpPort);
+        } else {
+            log.info("Cluster syncing is disabled. To enable set disable-sync=false in blobby.properties");
+            hashManager = null;
+        }
         Map<String, String> map = new HashMap<>();
         map.put(user, password);
         this.securityManager = new SimpleSecurityManager(realm, map);
