@@ -3,7 +3,6 @@
 
 package org.hashsplit4j.server.event;
 
-import com.hazelcast.core.Member;
 import org.hashsplit4j.event.NewBlobEvent;
 
 /**
@@ -12,19 +11,8 @@ import org.hashsplit4j.event.NewBlobEvent;
  * @author brad
  */
 public class ClusterNewBlobEvent extends NewBlobEvent{
-
-    private final Member member;
-    
-    public ClusterNewBlobEvent(String hash, Member member, byte[] data) {
+   
+    public ClusterNewBlobEvent(String hash, byte[] data) {
         super(hash, data);
-        this.member = member;
-    }
-
-    public Member getMember() {
-        return member;
-    }        
-
-
-    
-    
+    }           
 }

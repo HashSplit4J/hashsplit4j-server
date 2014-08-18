@@ -2,16 +2,6 @@
  */
 package org.hashsplit4j.server;
 
-import com.hazelcast.core.Cluster;
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.ITopic;
-import com.hazelcast.core.Member;
-import com.hazelcast.core.MemberAttributeEvent;
-import com.hazelcast.core.MembershipEvent;
-import com.hazelcast.core.MembershipListener;
-import com.hazelcast.core.Message;
-import com.hazelcast.core.MessageListener;
 import io.milton.event.Event;
 import io.milton.event.EventListener;
 import io.milton.event.EventManager;
@@ -29,6 +19,10 @@ import org.hashsplit4j.server.event.ClusterNewBlobEvent;
 import org.hashsplit4j.store.FileSystemBlobStore;
 import org.hashsplit4j.store.FsHashUtils;
 import org.hashsplit4j.store.LocalHashManager;
+import org.jgroups.JChannel;
+import org.jgroups.Message;
+import org.jgroups.ReceiverAdapter;
+import org.jgroups.View;
 
 /**
  * Maintains hash token state for a directory of blobs
@@ -48,52 +42,46 @@ public class FsHashManager {
     public static int DAILY_SYNC_INTERVAL_SECONDS = 60 * 60 * 24;
 
     private final LinkedBlockingQueue<NewBlobEvent> queueOfChanged;
-    private final LinkedBlockingQueue<Member> queueOfSyncTargets;
+//    private final LinkedBlockingQueue<Member> queueOfSyncTargets;
 
-    private final ITopic topic;
     private final File root;
-    private final HazelcastInstance hazel;
     private final ClusterListener clusterListener;
-    private final Cluster cluster;
+    private final JChannel channel;
     private final FileSystemBlobStore localBlobStore;
     private final NewBlobEventConsumer newBlobEventConsumer;
-    private final SyncQueueConsumer syncQueueConsumer;
-    private final HashSyncer hashSyncer;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    //private final SyncQueueConsumer syncQueueConsumer;
+    //private final HashSyncer hashSyncer;
+    //private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private boolean enableFullSync = false;
     private boolean stopped; // not really used yet    
 
-    public FsHashManager(FileSystemBlobStore localBlobStore, LocalHashManager localHashManager, EventManager eventManager, File root, String httpUser, String httpPwd, int httpPort) {
-        hazel = Hazelcast.newHazelcastInstance();
-        cluster = hazel.getCluster();
-        if (hazel != null) {
-            topic = hazel.getTopic("new-blobs");
-        } else {
-            log.warn("Couldnt connect to cluster");
-            topic = null;
-        }
+    public FsHashManager(FileSystemBlobStore localBlobStore, LocalHashManager localHashManager, EventManager eventManager, File root, String httpUser, String httpPwd, int httpPort) throws Exception {
+        clusterListener = new ClusterListener();
+
+        channel = new JChannel();
+        channel.setReceiver(clusterListener);
+        channel.connect("HashSharing");
+
         queueOfChanged = new LinkedBlockingQueue<>();
-        queueOfSyncTargets = new LinkedBlockingQueue<>();
+//        queueOfSyncTargets = new LinkedBlockingQueue<>();
         this.root = root;
         this.localBlobStore = localBlobStore;
         ExecutorService execService = Executors.newFixedThreadPool(2);
-        hashSyncer = new HashSyncer(localHashManager, cluster, queueOfChanged, topic, root, localBlobStore);
-        hashSyncer.setHttpUser(httpUser);
-        hashSyncer.setHttpPwd(httpPwd);
-        hashSyncer.setHttpPort(httpPort);
+//        hashSyncer = new HashSyncer(localHashManager, channel, queueOfChanged, topic, root, localBlobStore);
+//        hashSyncer.setHttpUser(httpUser);
+//        hashSyncer.setHttpPwd(httpPwd);
+//        hashSyncer.setHttpPort(httpPort);
         newBlobEventConsumer = new NewBlobEventConsumer();
         execService.execute(newBlobEventConsumer);
-        syncQueueConsumer = new SyncQueueConsumer();
-        execService.execute(syncQueueConsumer);
+//        syncQueueConsumer = new SyncQueueConsumer();
+//        execService.execute(syncQueueConsumer);
         eventManager.registerEventListener(new NewFileBlobListener(), NewFileBlobEvent.class);
-        clusterListener = new ClusterListener();
-        topic.addMessageListener(clusterListener);
 
-        cluster.addMembershipListener(new SyncMembershipListener());
-
-        DailyClusterSyncTask dailyClusterSyncTask = new DailyClusterSyncTask();
-        scheduler.scheduleWithFixedDelay(dailyClusterSyncTask, 60 * 60 * 1, DAILY_SYNC_INTERVAL_SECONDS, TimeUnit.SECONDS);
+//        channel.addMembershipListener(new SyncMembershipListener());
+//
+//        DailyClusterSyncTask dailyClusterSyncTask = new DailyClusterSyncTask();
+//        scheduler.scheduleWithFixedDelay(dailyClusterSyncTask, 60 * 60 * 1, DAILY_SYNC_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
@@ -109,112 +97,113 @@ public class FsHashManager {
         this.enableFullSync = enableFullSync;
     }
 
-    public class DailyClusterSyncTask implements Runnable {
-
-        @Override
-        public void run() {
-            log.info("Daily cluster sync, running every " + DAILY_SYNC_INTERVAL_SECONDS / 60 + " minutes");
-            for (Member m : cluster.getMembers()) {
-                if (!m.localMember()) {
-                    queueOfSyncTargets.offer(m);
-                }
-            }
-        }
-
-    }
-
-    public class SyncMembershipListener implements MembershipListener {
-
-        public SyncMembershipListener() {
-        }
-
-        @Override
-        public void memberAdded(MembershipEvent me) {
-            if (!me.getMember().localMember()) {
-                log.info("Cluster member joined, so add to sync queue");
-                queueOfSyncTargets.add(me.getMember());
-            }
-        }
-
-        @Override
-        public void memberRemoved(MembershipEvent me) {
-        }
-
-        @Override
-        public void memberAttributeChanged(MemberAttributeEvent mae) {
-
-        }
-        
-        
-    }
-
-    public class SyncQueueConsumer implements Runnable {
-
-        @Override
-        public void run() {
-            try {
-                while (!stopped) {
-                    Member item = queueOfSyncTargets.take();
-                    boolean done = false;
-                    int count = 0;
-                    while (!done) {
-                        try {
-                            if (enableFullSync) {
-                                log.info("Initiate sync with new cluster member: " + item.getInetSocketAddress());
-                                hashSyncer.sync(item);
-                            } else {
-                                log.warn("Would have done a sync, but is disabled");
-                            }
-                            done = true;
-                        } catch (Throwable e) {
-                            count++;
-                            log.error("Exception processing queued item: " + item + " Failed count: " + count);
-                            if (count > 3) {
-                                log.warn("Exceeded retry count, giving up", e);
-                                done = true;
-                            } else {
-                                log.warn("Failed to sync but will wait for a bit and retry");
-                                Thread.sleep(3000);
-                            }
-                        }
-                    }
-                }
-            } catch (InterruptedException e) {
-                log.warn("HashRemove thread has stopped do it interrupt");
-            }
-        }
-    }
+//    public class DailyClusterSyncTask implements Runnable {
+//
+//        @Override
+//        public void run() {
+//            log.info("Daily cluster sync, running every " + DAILY_SYNC_INTERVAL_SECONDS / 60 + " minutes");
+//            for (Member m : channel.getMembers()) {
+//                if (!m.localMember()) {
+//                    queueOfSyncTargets.offer(m);
+//                }
+//            }
+//        }
+//
+//    }
+//
+//    public class SyncMembershipListener implements MembershipListener {
+//
+//        public SyncMembershipListener() {
+//        }
+//
+//        @Override
+//        public void memberAdded(MembershipEvent me) {
+//            if (!me.getMember().localMember()) {
+//                log.info("Cluster member joined, so add to sync queue");
+//                queueOfSyncTargets.add(me.getMember());
+//            }
+//        }
+//
+//        @Override
+//        public void memberRemoved(MembershipEvent me) {
+//        }
+//
+//        @Override
+//        public void memberAttributeChanged(MemberAttributeEvent mae) {
+//
+//        }
+//        
+//        
+//    }
+//    public class SyncQueueConsumer implements Runnable {
+//
+//        @Override
+//        public void run() {
+//            try {
+//                while (!stopped) {
+//                    Member item = queueOfSyncTargets.take();
+//                    boolean done = false;
+//                    int count = 0;
+//                    while (!done) {
+//                        try {
+//                            if (enableFullSync) {
+//                                log.info("Initiate sync with new cluster member: " + item.getInetSocketAddress());
+//                                hashSyncer.sync(item);
+//                            } else {
+//                                log.warn("Would have done a sync, but is disabled");
+//                            }
+//                            done = true;
+//                        } catch (Throwable e) {
+//                            count++;
+//                            log.error("Exception processing queued item: " + item + " Failed count: " + count);
+//                            if (count > 3) {
+//                                log.warn("Exceeded retry count, giving up", e);
+//                                done = true;
+//                            } else {
+//                                log.warn("Failed to sync but will wait for a bit and retry");
+//                                Thread.sleep(3000);
+//                            }
+//                        }
+//                    }
+//                }
+//            } catch (InterruptedException e) {
+//                log.warn("HashRemove thread has stopped do it interrupt");
+//            }
+//        }
+//    }
 
     public class NewBlobEventConsumer implements Runnable {
 
         @Override
         public void run() {
             try {
-                if (enableFullSync) {
-                    log.info("Sync with any existing cluster members before processing new items");
-                    hashSyncer.sync();
-                } else {
-                    log.warn("Would have done an initial sync, but sync is disabled");
-                }
+//                if (enableFullSync) {
+//                    log.info("Sync with any existing cluster members before processing new items");
+//                    hashSyncer.sync();
+//                } else {
+//                    log.warn("Would have done an initial sync, but sync is disabled");
+//                }
 
                 while (!stopped) {
                     NewBlobEvent item = queueOfChanged.take();
                     try {
-                        File blob = FsHashUtils.toFile(root, item.getHash());
-                        hashSyncer.removeHashes(blob);
+//                        File blob = FsHashUtils.toFile(root, item.getHash());
+//                        hashSyncer.removeHashes(blob);
                         if (item instanceof NewFileBlobEvent) {
                             // only tell network if generated locally
                             NewFileBlobEvent fileBlobEvent = (NewFileBlobEvent) item;
-                            if (topic != null) {
+                            if (channel != null) {
                                 log.info("NewFileBlobEvent: Send message to cluster: " + fileBlobEvent.getHash());
-                                NewBlobMessage message = new NewBlobMessage(fileBlobEvent.getHash(), fileBlobEvent.getData());
-                                topic.publish(message); // let all our friends know
+                                NewBlobMessage newBlobMsg = new NewBlobMessage(fileBlobEvent.getHash(), fileBlobEvent.getData());
+                                Message msg = new Message(null, null, newBlobMsg);
+
+                                channel.send(msg); // let all our friends know
                             }
                         } else if (item instanceof ClusterNewBlobEvent) {
                             ClusterNewBlobEvent clusterNewBlobEvent = (ClusterNewBlobEvent) item;
                             log.info("Saving new blob: " + clusterNewBlobEvent.getHash());
                             localBlobStore.setBlob(clusterNewBlobEvent.getHash(), clusterNewBlobEvent.getData(), false);
-                            hashSyncer.removeHashes(blob);
+//                            hashSyncer.removeHashes(blob);
                         }
 
                         log.info("Queue size is now: " + queueOfChanged.size());
@@ -244,26 +233,34 @@ public class FsHashManager {
         }
     }
 
-    public class ClusterListener implements MessageListener<NewBlobMessage> {
+    public class ClusterListener extends ReceiverAdapter {
 
         @Override
-        public void onMessage(Message<NewBlobMessage> msg) {
-            Member sourceMember = msg.getPublishingMember();
-            if (!sourceMember.localMember()) {
-                NewBlobMessage newBlobMesssage = msg.getMessageObject();
-                String hash = newBlobMesssage.getHash();
-                File blob = FsHashUtils.toFile(root, hash);
-                if (!blob.exists()) {
-                    log.info("Received Message from cluster: " + newBlobMesssage.getHash());
-                    ClusterNewBlobEvent fe = new ClusterNewBlobEvent(hash, sourceMember, newBlobMesssage.getData());
-                    boolean result = queueOfChanged.offer(fe);
-                    if (!result) {
-                        log.error("Couldnt insert changed file onto queue: " + fe);
-                    }
-                } else {
-                    log.info("Blob file already exists, so ignore");
-                }
+        public void receive(Message msg) {
+            if( msg.getSrc().equals( channel.getAddress() ) ) {
+                log.info("Is local message so ignore");
+                return ;
             }
+
+            log.info("Received new remote message from " + msg.getSrc());
+            NewBlobMessage newBlobMesssage = (NewBlobMessage) msg.getObject();
+            String hash = newBlobMesssage.getHash();
+            File blob = FsHashUtils.toFile(root, hash);
+            if (!blob.exists()) {
+                log.info("Received Message from cluster: " + newBlobMesssage.getHash());
+                ClusterNewBlobEvent fe = new ClusterNewBlobEvent(hash, newBlobMesssage.getData());
+                boolean result = queueOfChanged.offer(fe);
+                if (!result) {
+                    log.error("Couldnt insert changed file onto queue: " + fe);
+                }
+            } else {
+                log.info("Blob file already exists, so ignore");
+            }
+        }
+
+        @Override
+        public void viewAccepted(View view) {
+            System.out.println("** view: " + view);
         }
 
     }

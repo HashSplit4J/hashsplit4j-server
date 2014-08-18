@@ -120,9 +120,9 @@
             <version>2.1.7</version>
         </dependency>
         <dependency>
-            <groupId>com.hazelcast</groupId>
-            <artifactId>hazelcast</artifactId>
-            <version>3.2.5</version>
+            <groupId>org.jgroups</groupId>
+            <artifactId>jgroups</artifactId>
+            <version>3.4.5.Final</version>
         </dependency>
         <dependency>
             <groupId>org.jdom</groupId>
@@ -189,6 +189,64 @@
                 </plugins>
             </build>         
         </profile>  
+        
+        <profile>
+            <id>run-8090</id> <!-- if using this as a second instance yuo might want to change the blobs path in blobby.properties too  -->
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.tomcat.maven</groupId>
+                        <artifactId>tomcat7-maven-plugin</artifactId>
+                        <version>2.2</version>
+                        <configuration>
+                            <port>8090</port>
+                            <path>/</path>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>shutdown</id>
+                                <phase>compile</phase>
+                                <goals>
+                                    <goal>shutdown</goal>
+                                </goals>
+                            </execution>
+                            
+                            <execution>
+                                <id>run</id>
+                                <phase>compile</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                            </execution>
+                        </executions>                        
+                        
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>2.6</version>
+                        <executions>
+                            <execution>
+                                <id>copy-env-resources</id>
+                                <phase>process-resources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <overwrite>true</overwrite>
+                                    <resources>
+                                        <resource>
+                                            <directory>${basedir}/src/test/resources</directory>                                 
+                                        </resource>
+                                    </resources>
+                                    <outputDirectory>${basedir}/target/classes</outputDirectory>
+                                </configuration>
+                            </execution>                                                    
+                        </executions>
+                    </plugin> 
+                </plugins>
+            </build>         
+        </profile>
     </profiles>  
 </project>
 

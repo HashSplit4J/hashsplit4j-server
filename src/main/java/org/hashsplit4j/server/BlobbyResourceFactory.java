@@ -13,7 +13,6 @@ import io.milton.http.SecurityManager;
 import io.milton.http.fs.SimpleSecurityManager;
 import io.milton.resource.CollectionResource;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 import java.lang.String;
 import java.util.HashMap;
@@ -50,7 +49,7 @@ public class BlobbyResourceFactory implements ResourceFactory {
     private final LocalHashManager localHashManager;
     private final File root;
 
-    public BlobbyResourceFactory() throws IOException {
+    public BlobbyResourceFactory() throws Exception {
         Properties defaultProps = new Properties();
         defaultProps.setProperty("root", "/blobs");
         defaultProps.setProperty("realm", "blobby");
