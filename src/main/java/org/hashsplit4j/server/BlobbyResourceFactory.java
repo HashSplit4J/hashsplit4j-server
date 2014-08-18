@@ -115,7 +115,7 @@ public class BlobbyResourceFactory implements ResourceFactory {
     @Override
     public Resource getResource(String host, final String path) throws NotAuthorizedException, BadRequestException {
         Path p = Path.path(path);
-        if( p.getFirst().equals("dirs") ) {
+        if( p.getFirst() != null && p.getFirst().equals("dirs") ) {
             p = p.getStripFirst();
             return findDir(p);
         }
