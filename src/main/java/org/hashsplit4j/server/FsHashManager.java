@@ -6,6 +6,7 @@ import io.milton.event.Event;
 import io.milton.event.EventListener;
 import io.milton.event.EventManager;
 import java.io.File;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,7 +60,14 @@ public class FsHashManager {
     public FsHashManager(FileSystemBlobStore localBlobStore, LocalHashManager localHashManager, EventManager eventManager, File root, String httpUser, String httpPwd, int httpPort) throws Exception {
         clusterListener = new ClusterListener();
 
-        channel = new JChannel();
+        InputStream udp = FsHashManager.class.getResourceAsStream(CONFIG);
+        if (udp != null) {
+            log.info("Using config: " + CONFIG);
+            channel = new JChannel(udp);
+        } else {
+            log.info("Didnt find config file, will use defaults. Config= " + CONFIG);
+            channel = new JChannel();
+        }
         channel.setReceiver(clusterListener);
         channel.connect("HashSharing");
 
@@ -83,6 +91,7 @@ public class FsHashManager {
 //        DailyClusterSyncTask dailyClusterSyncTask = new DailyClusterSyncTask();
 //        scheduler.scheduleWithFixedDelay(dailyClusterSyncTask, 60 * 60 * 1, DAILY_SYNC_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
+    private static final String CONFIG = "/blobby-jgroups.xml";
 
     /**
      * If true will attempt to perform a full sync on remote members
@@ -171,7 +180,6 @@ public class FsHashManager {
 //            }
 //        }
 //    }
-
     public class NewBlobEventConsumer implements Runnable {
 
         @Override
@@ -237,9 +245,9 @@ public class FsHashManager {
 
         @Override
         public void receive(Message msg) {
-            if( msg.getSrc().equals( channel.getAddress() ) ) {
+            if (msg.getSrc().equals(channel.getAddress())) {
                 log.info("Is local message so ignore");
-                return ;
+                return;
             }
 
             log.info("Received new remote message from " + msg.getSrc());

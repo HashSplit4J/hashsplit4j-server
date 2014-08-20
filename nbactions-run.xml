@@ -5,6 +5,9 @@
             <goals>
                 <goal>compile</goal>
             </goals>
+            <properties>
+                <java.net.preferIPv4Stack>true</java.net.preferIPv4Stack>
+            </properties>
         </action>
         <action>
             <actionName>debug</actionName>
