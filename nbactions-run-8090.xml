@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+        <action>
+            <actionName>run</actionName>
+            <packagings>
+                <packaging>war</packaging>
+                <packaging>ear</packaging>
+                <packaging>ejb</packaging>
+            </packagings>
+            <goals>
+                <goal>compile</goal>
+            </goals>
+            <properties>
+                <java.net.preferIPv4Stack>true</java.net.preferIPv4Stack>
+            </properties>
+        </action>
+    </actions>

@@ -9,8 +9,9 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="urn:org:jgroups http://www.jgroups.org/schema/JGroups-3.4.xsd">
     <UDP         
-         bind_addr="127.0.0.1"
-         mcast_port="${jgroups.udp.mcast_port:45588}"
+         bind_addr="127.0.0.1"         
+         mcast_addr="224.2.2.5"
+         mcast_port="54327"        
          tos="8"
          ucast_recv_buf_size="5M"
          ucast_send_buf_size="640K"

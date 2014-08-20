@@ -59,7 +59,13 @@ public class FsHashManager {
 
     public FsHashManager(FileSystemBlobStore localBlobStore, LocalHashManager localHashManager, EventManager eventManager, File root, String httpUser, String httpPwd, int httpPort) throws Exception {
         clusterListener = new ClusterListener();
-
+        
+        String s = System.getProperty("java.net.preferIPv4Stack");
+        log.info("java.net.preferIPv4Stack=" + s);
+        if( s == null ) {
+            System.setProperty("java.net.preferIPv4Stack" , "true");
+        }
+        
         InputStream udp = FsHashManager.class.getResourceAsStream(CONFIG);
         if (udp != null) {
             log.info("Using config: " + CONFIG);
@@ -68,6 +74,7 @@ public class FsHashManager {
             log.info("Didnt find config file, will use defaults. Config= " + CONFIG);
             channel = new JChannel();
         }
+        //channel = new JChannel();
         channel.setReceiver(clusterListener);
         channel.connect("HashSharing");
 
