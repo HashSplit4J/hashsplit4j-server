@@ -21,7 +21,6 @@ import java.util.Properties;
 import org.apache.log4j.Logger;
 import org.hashsplit4j.store.CachingBlobStore;
 import org.hashsplit4j.store.FileSystemBlobStore;
-import org.hashsplit4j.store.LocalHashManager;
 
 /**
  * Implements a URL scheme for handling HTTP interactions with a file sync
@@ -44,9 +43,9 @@ public class BlobbyResourceFactory implements ResourceFactory {
     private final io.milton.http.SecurityManager securityManager;
     private final BlobStore blobStore;
     private final RootFolder rootFolder;
-    private final FsHashManager hashManager;
+    //private final FsHashManager hashManager;
     private final FileSystemBlobStore fsBlobStore;
-    private final LocalHashManager localHashManager;
+    //private final LocalHashManager localHashManager;
     private final File root;
 
     public BlobbyResourceFactory() throws Exception {
@@ -90,19 +89,19 @@ public class BlobbyResourceFactory implements ResourceFactory {
         }
 
         EventManager eventManager = new EventManagerImpl();
-        localHashManager = new LocalHashManager();        
+//        localHashManager = new LocalHashManager();        
                 
         fsBlobStore = new FileSystemBlobStore(root, eventManager);
         blobStore = new CachingBlobStore(fsBlobStore, 1000);
-        String sDisableSync = props.getProperty("disable-sync");
-        boolean disableSync = "true".equalsIgnoreCase(sDisableSync);
-        if( !disableSync ) {
-            log.info("Cluster syncing is enabled. To disable set disable-sync=true in blobby.properties");
-            hashManager = new FsHashManager(fsBlobStore, localHashManager, eventManager, root, user, password, httpPort);
-        } else {
-            log.info("Cluster syncing is disabled. To enable set disable-sync=false in blobby.properties");
-            hashManager = null;
-        }
+//        String sDisableSync = props.getProperty("disable-sync");
+//        boolean disableSync = "true".equalsIgnoreCase(sDisableSync);
+//        if( !disableSync ) {
+//            log.info("Cluster syncing is enabled. To disable set disable-sync=true in blobby.properties");
+//            hashManager = new FsHashManager(fsBlobStore, localHashManager, eventManager, root, user, password, httpPort);
+//        } else {
+//            log.info("Cluster syncing is disabled. To enable set disable-sync=false in blobby.properties");
+//            hashManager = null;
+//        }
         Map<String, String> map = new HashMap<>();
         map.put(user, password);
         this.securityManager = new SimpleSecurityManager(realm, map);
@@ -114,10 +113,10 @@ public class BlobbyResourceFactory implements ResourceFactory {
     @Override
     public Resource getResource(String host, final String path) throws NotAuthorizedException, BadRequestException {
         Path p = Path.path(path);
-        if( p.getFirst() != null && p.getFirst().equals("dirs") ) {
-            p = p.getStripFirst();
-            return findDir(p);
-        }
+//        if( p.getFirst() != null && p.getFirst().equals("dirs") ) {
+//            p = p.getStripFirst();
+//            return findDir(p);
+//        }
         return find(p, rootFolder);        
     }
 
@@ -148,25 +147,26 @@ public class BlobbyResourceFactory implements ResourceFactory {
      * @param p
      * @return 
      */
-    private Resource findDir(Path p) {
-        File dir = root;
-        for( String segment : p.getParts() ) {
-            dir = locateFile(dir, segment);
-            if( dir == null ) {
-                return null;
-            }
-        }
-        return new DirHashesResource(localHashManager, dir, this);
-    }
+//    private Resource findDir(Path p) {
+//        File dir = root;
+//        for( String segment : p.getParts() ) {
+//            dir = locateFile(dir, segment);
+//            if( dir == null ) {
+//                return null;
+//            }
+//        }
+////        return new DirHashesResource(localHashManager, dir, this);
+//        return null;
+//    }
 
-    private File locateFile(File dir, String name) {
-        File f = new File(dir, name);
-        if( f.exists() ) {
-            return f;
-        } else {
-            return null;
-        }
-    }
+//    private File locateFile(File dir, String name) {
+//        File f = new File(dir, name);
+//        if( f.exists() ) {
+//            return f;
+//        } else {
+//            return null;
+//        }
+//    }
     
     
 }
